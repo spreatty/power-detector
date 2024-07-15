@@ -30,8 +30,7 @@ const notify = () => {
         });
 };
 
-const onUpdate = (payload, port) => {
-    const signal = payload.signal || port;
+const onUpdate = (payload, signal) => {
     signals[signal] = payload.power == 'charger';
     const powerSignals = Object.values(signals).filter(yes).length;
     if (status == powerOff && powerSignals == 1) {
@@ -76,9 +75,10 @@ const createReportServer = port => new Promise((resolve, reject) => {
                 res.writeHead(400);
             }
             res.end();
-            log('Reported', payload);
+            const signal = payload.signal || port;
+            log('Reported', signal, payload);
             if (payload.power) {
-                onUpdate(payload, port);
+                onUpdate(payload, signal);
             }
         });
     });
