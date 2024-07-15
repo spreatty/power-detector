@@ -2,7 +2,7 @@ const http = require('http');
 const axios = require('axios');
 const config = require('./config.json');
 
-const log = (...args) => console.log(new Date().toISOString().slice(0, -1).replace('T', ' '), ...args);
+const log = (...args) => console.log(new Date().toLocaleString(), ...args);
 const yes = value => !!value;
 
 const powerOff = 0, powerDetecting = 1, powerBackup = 2, powerMain = 3;
