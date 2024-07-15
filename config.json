@@ -1,0 +1,6 @@
+{
+    "notificationUrl": "http://127.0.0.1:8100",
+    "reportPorts": [8085, 8086, 8087],
+    "powerMainThreshold": 3,
+    "powerBackupTimeoutMs": 5000
+}
