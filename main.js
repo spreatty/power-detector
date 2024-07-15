@@ -12,7 +12,7 @@ const statusMap = {
     [powerMain]: 'powerMain'
 };
 const setStatus = process.argv[2];
-var status = setStatus == 'on' ? powerMain : setStatus == 'part' ? powerBackup : powerOff;
+var status = setStatus == 'main' ? powerMain : setStatus == 'backup' ? powerBackup : powerOff;
 log('Status:', statusMap[status]);
 
 var timer = 0;
