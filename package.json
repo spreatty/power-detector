@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node main.js"
   },
-  "author": "@spreeatty",
+  "author": "",
   "license": "MIT",
   "dependencies": {
     "axios": "^1.7.2"
