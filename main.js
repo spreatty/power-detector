@@ -1,34 +1,62 @@
-const http = require('http');
+const express = require('express');
 const axios = require('axios');
 const config = require('./config.json');
 
 const log = (...args) => console.log(new Date().toLocaleString(), ...args);
 const yes = value => !!value;
 
-const powerOff = 0, powerDetecting = 1, powerBackup = 2, powerMain = 3;
-const statusMap = {
-    [powerOff]: 'powerOff',
-    [powerBackup]: 'powerBackup',
-    [powerMain]: 'powerMain'
-};
-const setStatus = process.argv[2];
-var status = setStatus == 'main' ? powerMain : setStatus == 'backup' ? powerBackup : powerOff;
-log('Status:', statusMap[status]);
+const powerOff = 0, powerBackup = 1, powerMain = 2, powerDetecting = 3;
+const statusMap = ['off', 'backup', 'main'];
+var status = statusMap.indexOf(process.argv[2]);
+if (status == -1) {
+    status = powerOff;
+}
+log('Power:', statusMap[status]);
 
 var timer = 0;
 var signals = {};
 
 const notify = () => {
-    axios.post(config.notificationUrl, {status: statusMap[status]})
-        .then(res => log('Response code:', res.status))
-        .catch(err => {
-            if (err.response) {
-                log('Response code:', err.response.status);
-              } else {
-                log('Error:', err.message);
-              }
-        });
+    config.notificationUrls.forEach(async url => {
+        try {
+            const res = await axios.post(url, {status: statusMap[status]});
+            log('Response code:', res.status);
+        } catch(e) {
+            if (e.response) {
+                log('Response code:', e.response.status);
+            } else {
+                log('Error:', e.message);
+            }
+        }
+    });
 };
+
+const createManageServer = port => new Promise((resolve, reject) => {
+    const app = express();
+    app.get('/status', (req, res) => {
+        res.send({ power: statusMap[status == powerDetecting ? 0 : status] });
+    });
+    app.post('/correct', express.json(), (req, res) => {
+        log('Correction requested', req.body);
+        const newStatus = statusMap.indexOf(req.body.power);
+        if (newStatus != -1) {
+            status = newStatus;
+            log('Power ' + statusMap[status]);
+            clearTimeout(timer);
+            notify();
+        }
+        res.send({ status: 'success' });
+    });
+    try {
+        const srv = app.listen(port, () => {
+            log('Server ready', port);
+            resolve(srv);
+        });
+    } catch(e) {
+        log('Server failed to start', e);
+        reject(e);
+    }
+});
 
 const onUpdate = (payload, signal) => {
     signals[signal] = payload.power == 'charger';
@@ -58,42 +86,27 @@ const onUpdate = (payload, signal) => {
 };
 
 const createReportServer = port => new Promise((resolve, reject) => {
-    const srv = http.createServer((req, res) => {
-        if (req.method != 'POST') {
-            res.writeHead(400);
-            res.end();
-            return;
+    const app = express();
+    app.post('/', express.json(), (req, res) => {
+        const signal = req.body.signal || port;
+        log('Reported', signal, req.body);
+        if (req.body.power) {
+            onUpdate(req.body, signal);
         }
-        let body = '';
-        req.on('data', chunk => body += chunk);
-        req.on('end', () => {
-            let payload;
-            try {
-                payload = JSON.parse(body);
-                res.writeHead(201);
-            } catch(e) {
-                res.writeHead(400);
-            }
-            res.end();
-            const signal = payload.signal || port;
-            log('Reported', signal, payload);
-            if (payload.power) {
-                onUpdate(payload, signal);
-            }
-        });
+        res.sendStatus(201);
     });
     try {
-        srv.listen(port, () => {
-            log('Server listening', port);
+        const srv = app.listen(port, () => {
+            log('Report server listening', port);
             resolve(srv);
         });
     } catch(e) {
-        log('Server failed to start', e);
+        log('Report server failed to start', e);
         reject(e);
     }
 });
 
-Promise.allSettled(config.reportPorts.map(createReportServer))
+Promise.allSettled([...config.reportPorts.map(createReportServer), createManageServer(config.serverPort)])
     .then(settles => {
         if (settles.some(s => s.reason)) {
             log('Some servers could not start');
