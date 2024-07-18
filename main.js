@@ -39,13 +39,15 @@ const createManageServer = port => new Promise((resolve, reject) => {
     app.post('/correct', express.json(), (req, res) => {
         log('Correction requested', req.body);
         const newStatus = statusMap.indexOf(req.body.power);
-        if (newStatus != -1) {
-            status = newStatus;
-            log('Power ' + statusMap[status]);
-            clearTimeout(timer);
-            notify();
+        if (newStatus == -1) {
+            res.sendStatus(400);
+            return;
         }
-        res.send({ status: 'success' });
+        status = newStatus;
+        log('Power', statusMap[status]);
+        clearTimeout(timer);
+        notify();
+        res.sendStatus(201);
     });
     try {
         const srv = app.listen(port, () => {
