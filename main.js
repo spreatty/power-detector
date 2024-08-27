@@ -3,8 +3,10 @@ const axios = require('axios');
 const config = require('./config.json');
 
 const log = (...args) => console.log(new Date().toLocaleString(), ...args);
-const yes = value => !!value;
+const isTrue = value => value;
 
+const reportedOff = 0, reportedOn = 1;
+const reportMap = ['off', 'on'];
 const powerOff = 0, powerBackup = 1, powerMain = 2, powerDetecting = 3;
 const statusMap = ['off', 'backup', 'main'];
 var status = statusMap.indexOf(process.argv[2]);
@@ -31,38 +33,8 @@ const notify = () => {
     });
 };
 
-const createManageServer = port => new Promise((resolve, reject) => {
-    const app = express();
-    app.get('/status', (req, res) => {
-        res.send({ power: statusMap[status == powerDetecting ? 0 : status] });
-    });
-    app.post('/correct', express.json(), (req, res) => {
-        log('Correction requested', req.body);
-        const newStatus = statusMap.indexOf(req.body.power);
-        if (newStatus == -1) {
-            res.sendStatus(400);
-            return;
-        }
-        status = newStatus;
-        log('Power', statusMap[status]);
-        clearTimeout(timer);
-        notify();
-        res.sendStatus(201);
-    });
-    try {
-        const srv = app.listen(port, () => {
-            log('Server ready', port);
-            resolve(srv);
-        });
-    } catch(e) {
-        log('Server failed to start', e);
-        reject(e);
-    }
-});
-
-const onUpdate = (payload, signal) => {
-    signals[signal] = payload.power == 'charger';
-    const powerSignals = Object.values(signals).filter(yes).length;
+const onUpdate = () => {
+    const powerSignals = Object.values(signals).filter(isTrue).length;
     if (status == powerOff && powerSignals == 1) {
         status = powerDetecting;
         log('Powering on')
@@ -87,33 +59,35 @@ const onUpdate = (payload, signal) => {
     }
 };
 
-const createReportServer = port => new Promise((resolve, reject) => {
+(async () => {
     const app = express();
-    app.post('/', express.json(), (req, res) => {
-        const signal = req.body.signal || port;
-        log('Reported', signal, req.body);
-        if (req.body.power) {
-            onUpdate(req.body, signal);
+    app.post('/report/:signal/:power', (req, res) => {
+        log('Reported', req.params);
+        const signal = req.params.signal;
+        const power = reportMap.indexOf(req.params.power);
+        if (power != -1) {
+            signals[signal] = power == reportedOn;
+            onUpdate();
         }
         res.sendStatus(201);
     });
-    try {
-        const srv = app.listen(port, () => {
-            log('Report server listening', port);
-            resolve(srv);
-        });
-    } catch(e) {
-        log('Report server failed to start', e);
-        reject(e);
-    }
-});
-
-Promise.allSettled([...config.reportPorts.map(createReportServer), createManageServer(config.serverPort)])
-    .then(settles => {
-        if (settles.some(s => s.reason)) {
-            log('Some servers could not start');
-            settles.filter(s => s.value).forEach(s => s.value.close());
-        } else {
-            log('Ready');
-        }
+    app.get('/status', (req, res) => {
+        res.send({ power: statusMap[status == powerDetecting ? 0 : status] });
     });
+    app.post('/correct', express.json(), (req, res) => {
+        log('Correction requested', req.body);
+        const newStatus = statusMap.indexOf(req.body.power);
+        if (newStatus == -1) {
+            res.sendStatus(400);
+            return;
+        }
+        status = newStatus;
+        log('Power', statusMap[status]);
+        clearTimeout(timer);
+        notify();
+        res.sendStatus(201);
+    });
+    
+    await new Promise(resolve => app.listen(config.port, resolve));
+    log('Server ready', config.port);
+})();

@@ -1,7 +1,6 @@
 {
     "notificationUrls": ["http://127.0.0.1:8100/power", "http://127.0.0.1:8101/power"],
-    "serverPort": 8089,
-    "reportPorts": [8085, 8086, 8087],
+    "port": 8089,
     "powerMainThreshold": 3,
     "powerBackupTimeoutMs": 8000
 }
